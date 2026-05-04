@@ -131,54 +131,81 @@
 
   // ─── MAP ──────────────────────────────────
   // 0=floor, 1=wall, 2=furniture, 3=carpet
+  // D=door position (parsed into doors array, floor underneath)
   const MAP_STR = [
     '##########################################',
-    '#..C......C.......CC..............C....C.#',
-    '#..FFFF...FFFF....CC.......CC....FFFF....#',
-    '#..FFFF...FFFF.....FFFF....CC....FFFF....#',
-    '#...CC.............FFFF....CC......CC....#',
-    '#...CC..........C.................CC.....#',
-    '#..............C..................CC.....#',
-    '#...FFFF......CC...........C..............#',
-    '#...FFFF......CC...........C..............#',
-    '####....##############..########....######',
-    '#..CC........CC...................CC.....#',
-    '#..CC........CC........C.........CC......#',
-    '#..FFFF..........##......FFFF...CC.......#',
-    '#..FFFF..........##......FFFF............#',
-    '#..CC.............##..........CC.........#',
-    '#..CC.........................CC.........#',
-    '####....##############..########....######',
-    '#..CC........CC..................CC......#',
-    '#..CC........CC........C........CC.......#',
-    '#..FFFF...........##....FFFF....CC.......#',
-    '#..FFFF...........##....FFFF.............#',
-    '#..CC..............##.........CC.........#',
-    '#..CC.........................CC.........#',
-    '####....##############..########....######',
-    '#..CC........CC...........C......CC......#',
-    '#..CC........CC..........CC......CC......#',
-    '#..FFFF...........##.....FFFF.....CC.....#',
-    '#..FFFF...........##.....FFFF............#',
-    '#..CC.........................CC.........#',
+    '#........................................#',
+    '#..C....................C................#',
+    '#..C..FF..C.............C..TTT..........#',
+    '#.....FF..C.............C..T.T..C.......#',
+    '#.....CC..C.............C..TTT..C.......#',
+    '#..........C.............C......C.......#',
+    '#..........C...............C............#',
+    '#....................................C..#',
+    '#####D#####D#######D#####D#####D#########',
+    '#..CC......................C............#',
+    '#..CC......................C...VV.......#',
+    '#..FF......................C...VV..C....#',
+    '#..FF...............................C....#',
+    '#..............................C.........#',
+    '#.......................................#',
+    '#.......................................#',
+    '###D###D#####D############D###D#####D####',
+    '#..BB..C...#..UU..C.########..KK......C.#',
+    '#..BB..C...#..UU..C.#......##..KK......C.#',
+    '#.......C..#.......#.#......##.......C..#',
+    '#.......C..#..C....#.#......##..C........#',
+    '#.......C..#..C....#.#......##..C....SS..#',
+    '#..W........#.......#.#......##.......SS..#',
+    '#..W........#.......#.########...........#',
+    '##########################################',
+    '##########################################',
+    '##########################################',
+    '##########################################',
     '##########################################',
   ];
 
   let map = [];
-  for (let y = 0; y < MAP_H; y++) {
-    map[y] = [];
-    for (let x = 0; x < MAP_W; x++) {
-      const ch = MAP_STR[y][x];
-      if (ch === '#') map[y][x] = 1;
-      else if (ch === 'F') map[y][x] = 2;
-      else if (ch === 'C') map[y][x] = 3;
-      else map[y][x] = 0;
+  let doors = []; // { x, y, open: false }
+  // Room feature lookup: "x,y" -> type for special rendering
+  const roomFeatures = {};
+
+  function resetMap() {
+    map = [];
+    doors = [];
+    for (const key in roomFeatures) delete roomFeatures[key];
+    for (let y = 0; y < MAP_H; y++) {
+      map[y] = [];
+      for (let x = 0; x < MAP_W; x++) {
+        const ch = MAP_STR[y][x];
+        if (ch === '#') map[y][x] = 1;
+        else if (ch === 'F') { map[y][x] = 2; roomFeatures[x+','+y] = 'fireplace'; }
+        else if (ch === 'T') { map[y][x] = 2; roomFeatures[x+','+y] = 'dining_table'; }
+        else if (ch === 'B') { map[y][x] = 2; roomFeatures[x+','+y] = 'bed'; }
+        else if (ch === 'U') { map[y][x] = 2; roomFeatures[x+','+y] = 'bathtub'; }
+        else if (ch === 'V') { map[y][x] = 2; roomFeatures[x+','+y] = 'stove'; }
+        else if (ch === 'K') { map[y][x] = 2; roomFeatures[x+','+y] = 'desk'; }
+        else if (ch === 'S') { map[y][x] = 2; roomFeatures[x+','+y] = 'bookshelf'; }
+        else if (ch === 'W') { map[y][x] = 2; roomFeatures[x+','+y] = 'wardrobe'; }
+        else if (ch === 'C') map[y][x] = 3;
+        else if (ch === 'D') { map[y][x] = 0; doors.push({ x, y, open: false }); }
+        else map[y][x] = 0;
+      }
     }
   }
 
-  function isSolid(x, y) {
-    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return true;
-    return map[y][x] === 1 || map[y][x] === 2;
+  function isSolid(tx, ty) {
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
+    if (map[ty][tx] === 1 || map[ty][tx] === 2) return true;
+    // Check closed doors (door occupies the tile)
+    for (const d of doors) {
+      if (!d.open && d.x === tx && d.y === ty) return true;
+    }
+    return false;
+  }
+
+  function findDoor(tx, ty) {
+    return doors.find(d => d.x === tx && d.y === ty);
   }
 
   // ─── GAME STATE ───────────────────────────
@@ -282,6 +309,26 @@
       e.preventDefault();
       if (gameState === STATE.MENU) startGame();
       else if (gameState === STATE.OVER) resetToMenu();
+      else if (gameState === STATE.PLAYING) {
+        // Try to open a nearby door
+        const px = Math.floor(player.x / TILE);
+        const py = Math.floor(player.y / TILE);
+        const neighbors = [{x:px-1,y:py},{x:px+1,y:py},{x:px,y:py-1},{x:px,y:py+1}];
+        let closest = null, closestDist = 2;
+        for (const n of neighbors) {
+          const d = findDoor(n.x, n.y);
+          if (d) {
+            const dist = Math.abs(n.x - px) + Math.abs(n.y - py);
+            if (dist < closestDist) { closest = d; closestDist = dist; }
+          }
+        }
+        if (closest) {
+          closest.open = !closest.open;
+          hintEl.textContent = closest.open ? 'Door opened' : 'Door closed';
+          hintEl.style.color = '#a08060';
+          setTimeout(() => { hintEl.style.color = '#888'; hintEl.textContent = 'WASD to move | SPACE door | Survive!'; }, 1200);
+        }
+      }
     }
   });
   window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
@@ -391,6 +438,7 @@
     lastMilestone = 0;
     milestoneMsg = '';
     milestoneTimer = 0;
+    resetMap();
     spawnPlayer();
     spawnMax();
     spawnItems(6);
@@ -400,7 +448,7 @@
     msgCenter.style.display = 'none';
     timerEl.textContent = '00:00.0';
     timerEl.style.color = '#ccc';
-    hintEl.textContent = 'WASD to move  |  Survive!';
+        hintEl.textContent = 'WASD to move  |  SPACE door  |  Survive!';
     hintEl.style.color = '#888';
     updateUI();
   }
@@ -662,52 +710,217 @@
         const tile = map[y][x];
         const px = x * TILE;
         const py = y * TILE;
+        const feat = roomFeatures[x+','+y];
 
         if (tile === 1) {
-          // Wall
-          ctx.fillStyle = '#1a1410';
+          // Wall - retro horror dark wood paneling
+          ctx.fillStyle = '#140f0a';
           ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = '#252018';
+          ctx.fillStyle = '#1d1610';
           ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
-          // Subtle highlight
-          ctx.fillStyle = '#2e261e';
-          ctx.fillRect(px + 2, py + 2, TILE - 4, 3);
-          ctx.fillRect(px + 2, py + 2, 3, TILE - 4);
+          // Wall paneling lines
+          ctx.fillStyle = '#261e15';
+          ctx.fillRect(px + 2, py + 2, TILE - 4, 2);
+          ctx.fillRect(px + 2, py + 2, 2, TILE - 4);
+          // Subtle shadow at base
+          ctx.fillStyle = 'rgba(0,0,0,0.3)';
+          ctx.fillRect(px + 2, py + TILE - 6, TILE - 4, 4);
+        } else if (tile === 2 && feat) {
+          // Draw floor underneath first
+          drawFloorTile(px, py, x, y);
+          // Room-specific furniture
+          drawFurniture(px, py, feat, x, y);
         } else if (tile === 2) {
-          // Furniture
+          // Generic furniture
+          drawFloorTile(px, py, x, y);
           ctx.fillStyle = '#2a2018';
-          ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = '#3a2e22';
-          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
-          ctx.fillStyle = '#4a3a2a';
-          ctx.fillRect(px + 5, py + 5, TILE - 10, TILE - 10);
-        } else if (tile === 3) {
-          // Carpet / rug (decorative, walkable)
-          ctx.fillStyle = '#1e1812';
-          ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = '#2a1e14';
           ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
-          ctx.fillStyle = '#35281c';
+          ctx.fillStyle = '#3a2e22';
           ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
-          // Carpet pattern
-          ctx.fillStyle = '#3d2e20';
-          if ((x + y) % 3 === 0) ctx.fillRect(px + 6, py + 6, 4, 4);
-          if ((x + y) % 3 === 1) ctx.fillRect(px + 14, py + 14, 4, 4);
-        } else {
-          // Floor
-          ctx.fillStyle = '#1e1812';
-          ctx.fillRect(px, py, TILE, TILE);
-          // Floor pattern
-          ctx.fillStyle = '#221c14';
-          if ((x + y) % 2 === 0) {
-            ctx.fillRect(px, py, TILE, TILE);
+        } else if (tile === 3) {
+          // Carpet / rug
+          drawFloorTile(px, py, x, y);
+          ctx.fillStyle = '#2a1a10';
+          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+          ctx.fillStyle = '#352416';
+          ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+          // Persian-style pattern
+          ctx.fillStyle = '#4a3020';
+          if ((x + y) % 3 === 0) ctx.fillRect(px + 6, py + 6, 5, 5);
+          if ((x + y) % 3 === 1) ctx.fillRect(px + 14, py + 14, 5, 5);
+          if ((x + y) % 4 === 2) {
+            ctx.fillStyle = '#3d2418';
+            ctx.fillRect(px + 10, py + 10, 12, 12);
+            ctx.fillStyle = '#5a3a24';
+            ctx.fillRect(px + 12, py + 12, 8, 8);
           }
-          // Subtle grid
-          ctx.strokeStyle = '#1a1410';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(px + 0.5, py + 0.5, TILE, TILE);
+        } else {
+          drawFloorTile(px, py, x, y);
         }
       }
+    }
+
+    // Draw doors on top
+    for (const d of doors) {
+      const dx = d.x * TILE;
+      const dy = d.y * TILE;
+      // Door frame
+      ctx.fillStyle = '#1a1410';
+      ctx.fillRect(dx, dy, TILE, TILE);
+      ctx.fillStyle = '#252018';
+      ctx.fillRect(dx + 2, dy + 2, TILE - 4, TILE - 4);
+      if (!d.open) {
+        // Closed door - dark wood with handle
+        ctx.fillStyle = '#2a1a10';
+        ctx.fillRect(dx + 4, dy + 4, TILE - 8, TILE - 8);
+        ctx.fillStyle = '#3d2818';
+        ctx.fillRect(dx + 6, dy + 6, TILE - 12, TILE - 12);
+        // Handle
+        ctx.fillStyle = '#aa8844';
+        ctx.beginPath();
+        ctx.arc(dx + TILE - 10, dy + TILE/2, 3, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Open door - floor visible with door outline on one side
+        drawFloorTile(dx, dy, d.x, d.y);
+        ctx.fillStyle = '#3d2818';
+        ctx.fillRect(dx + 2, dy + 2, 4, TILE - 4);
+        ctx.fillStyle = '#2a1a10';
+        ctx.fillRect(dx + 3, dy + 3, 2, TILE - 6);
+      }
+    }
+  }
+
+  function drawFloorTile(px, py, x, y) {
+    // Dark hardwood floor
+    ctx.fillStyle = '#1a120c';
+    ctx.fillRect(px, py, TILE, TILE);
+    const even = (x + y) % 2 === 0;
+    ctx.fillStyle = even ? '#1e1610' : '#221812';
+    ctx.fillRect(px, py, TILE, TILE);
+    // Wood grain lines
+    ctx.fillStyle = even ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.05)';
+    ctx.fillRect(px + 2, py + 2, TILE - 4, 1);
+    ctx.fillRect(px + 2, py + TILE - 8, TILE - 4, 1);
+    // Subtle grid
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + 0.5, py + 0.5, TILE, TILE);
+  }
+
+  function drawFurniture(px, py, type, x, y) {
+    ctx.fillStyle = '#1a1208';
+    ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+
+    if (type === 'fireplace') {
+      // Grand fireplace - dark brick with glowing fire
+      ctx.fillStyle = '#2a1a10';
+      ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+      ctx.fillStyle = '#3a2010';
+      ctx.fillRect(px + 5, py + 5, TILE - 10, TILE - 10);
+      // Brick pattern
+      ctx.fillStyle = '#4a2816';
+      for (let by = py + 5; by < py + TILE - 5; by += 5) {
+        ctx.fillRect(px + 5, by, TILE - 10, 2);
+      }
+      // Fire glow
+      const flicker = 0.6 + 0.4 * Math.sin(Date.now() * 0.01 + x * 3);
+      const grd = ctx.createRadialGradient(px + TILE/2, py + TILE - 6, 2, px + TILE/2, py + TILE - 6, 10);
+      grd.addColorStop(0, `rgba(255,160,30,${0.9 * flicker})`);
+      grd.addColorStop(0.4, `rgba(255,80,10,${0.6 * flicker})`);
+      grd.addColorStop(1, 'rgba(200,40,5,0)');
+      ctx.fillStyle = grd;
+      ctx.fillRect(px + 6, py + 8, TILE - 12, TILE - 10);
+      // Mantel
+      ctx.fillStyle = '#5a3820';
+      ctx.fillRect(px + 3, py + 3, TILE - 6, 3);
+    } else if (type === 'bed') {
+      // Bed with pillow
+      ctx.fillStyle = '#2a1a14';
+      ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+      ctx.fillStyle = '#3d241a';
+      ctx.fillRect(px + 5, py + 5, TILE - 10, TILE - 10);
+      // Blanket/comforter
+      ctx.fillStyle = '#4a2820';
+      ctx.fillRect(px + 4, py + 10, TILE - 8, TILE - 14);
+      // Pillow
+      ctx.fillStyle = '#ccc8c0';
+      ctx.fillRect(px + 5, py + 5, TILE - 10, 6);
+      ctx.fillStyle = '#e8e4dc';
+      ctx.fillRect(px + 6, py + 6, TILE - 12, 3);
+    } else if (type === 'dining_table') {
+      // Long dining table
+      ctx.fillStyle = '#3a2414';
+      ctx.fillRect(px + 2, py + 6, TILE - 4, TILE - 12);
+      ctx.fillStyle = '#4d301c';
+      ctx.fillRect(px + 3, py + 7, TILE - 6, TILE - 14);
+      // Table legs
+      ctx.fillStyle = '#2a1a0e';
+      ctx.fillRect(px + 4, py + 3, 3, 4);
+      ctx.fillRect(px + TILE - 7, py + 3, 3, 4);
+    } else if (type === 'bathtub') {
+      // Clawfoot bathtub
+      ctx.fillStyle = '#445566';
+      ctx.fillRect(px + 3, py + 4, TILE - 6, TILE - 8);
+      ctx.fillStyle = '#556677';
+      ctx.fillRect(px + 5, py + 5, TILE - 10, TILE - 10);
+      // Water line
+      ctx.fillStyle = 'rgba(140,180,210,0.3)';
+      ctx.fillRect(px + 6, py + 7, TILE - 12, 4);
+      // Feet
+      ctx.fillStyle = '#aa9966';
+      ctx.beginPath(); ctx.arc(px + 6, py + 4, 2, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px + TILE - 6, py + 4, 2, 0, Math.PI*2); ctx.fill();
+    } else if (type === 'stove') {
+      // Kitchen stove/oven
+      ctx.fillStyle = '#333333';
+      ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+      ctx.fillStyle = '#444444';
+      ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+      // Burners
+      ctx.fillStyle = '#222';
+      ctx.beginPath(); ctx.arc(px + TILE/2 - 5, py + 8, 4, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px + TILE/2 + 5, py + 8, 4, 0, Math.PI*2); ctx.fill();
+      // Oven door
+      ctx.fillStyle = '#2a2a2a';
+      ctx.fillRect(px + 5, py + 14, TILE - 10, 10);
+      ctx.fillStyle = '#555';
+      ctx.fillRect(px + 7, py + 16, TILE - 14, 2);
+    } else if (type === 'desk') {
+      // Writing desk
+      ctx.fillStyle = '#3a2414';
+      ctx.fillRect(px + 2, py + 6, TILE - 4, TILE - 8);
+      ctx.fillStyle = '#4d3018';
+      ctx.fillRect(px + 3, py + 6, TILE - 6, TILE - 9);
+      // Legs
+      ctx.fillStyle = '#2a1a0e';
+      ctx.fillRect(px + 4, py + TILE - 8, 3, 6);
+      ctx.fillRect(px + TILE - 7, py + TILE - 8, 3, 6);
+    } else if (type === 'bookshelf') {
+      // Tall bookshelf
+      ctx.fillStyle = '#3a2418';
+      ctx.fillRect(px + 3, py + 2, TILE - 6, TILE - 4);
+      ctx.fillStyle = '#4d301c';
+      ctx.fillRect(px + 4, py + 3, TILE - 8, TILE - 6);
+      // Books
+      const colors = ['#6a3a2a','#5a4030','#3a5040','#704030','#4a3a50'];
+      for (let by = py + 4; by < py + TILE - 4; by += 5) {
+        ctx.fillStyle = colors[(by >> 2) % colors.length];
+        ctx.fillRect(px + 5, by, TILE - 10, 3);
+      }
+    } else if (type === 'wardrobe') {
+      // Tall wardrobe/cabinet
+      ctx.fillStyle = '#2a1a10';
+      ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+      ctx.fillStyle = '#3d2418';
+      ctx.fillRect(px + 4, py + 3, TILE - 8, TILE - 6);
+      // Door split
+      ctx.fillStyle = '#2a1a10';
+      ctx.fillRect(px + TILE/2 - 1, py + 4, 2, TILE - 8);
+      // Handles
+      ctx.fillStyle = '#aa8844';
+      ctx.fillRect(px + TILE/2 - 5, py + TILE/2, 3, 3);
+      ctx.fillRect(px + TILE/2 + 2, py + TILE/2, 3, 3);
     }
   }
 
@@ -1006,6 +1219,7 @@
   }
 
   // ─── INIT ─────────────────────────────────
+  resetMap();
   spawnPlayer();
   spawnMax();
   livesEl.textContent = '';
@@ -1013,48 +1227,6 @@
   // Start in menu state - draw initial frame
   render();
   requestAnimationFrame(gameLoop);
-
-  // ─── TOUCH CONTROLS (MOBILE) ──────────────
-  canvas.addEventListener('touchstart', e => {
-    e.preventDefault();
-    if (gameState === STATE.MENU) startGame();
-    else if (gameState === STATE.OVER) resetToMenu();
-  });
-
-  // Virtual joystick for mobile
-  let touchActive = false;
-  let touchDX = 0, touchDY = 0;
-
-  canvas.addEventListener('touchmove', e => {
-    e.preventDefault();
-    if (gameState !== STATE.PLAYING) return;
-    const touch = e.touches[0];
-    const rect = canvas.getBoundingClientRect();
-    const tx = touch.clientX - rect.left;
-    const ty = touch.clientY - rect.top;
-    touchDX = (tx - player.x) / 50;
-    touchDY = (ty - player.y) / 50;
-    const len = Math.sqrt(touchDX * touchDX + touchDY * touchDY);
-    if (len > 1) { touchDX /= len; touchDY /= len; }
-    touchActive = true;
-  });
-
-  canvas.addEventListener('touchend', e => {
-    e.preventDefault();
-    touchActive = false;
-    touchDX = 0;
-    touchDY = 0;
-  });
-
-  // Inject touch input into keys dynamically
-  setInterval(() => {
-    if (touchActive && gameState === STATE.PLAYING) {
-      keys['w'] = touchDY < -0.3;
-      keys['s'] = touchDY > 0.3;
-      keys['a'] = touchDX < -0.3;
-      keys['d'] = touchDX > 0.3;
-    }
-  }, 50);
 
 })();
 </script>
