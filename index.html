@@ -142,7 +142,7 @@
     '#..........C.............C......C.......#',
     '#..........C...............C............#',
     '#....................................C..#',
-    '#####D#####D#######D#####D#####D#########',
+    '#####DD####DD######DD####DD####DD####DD###',
     '#..CC......................C............#',
     '#..CC......................C...VV.......#',
     '#..FF......................C...VV..C....#',
@@ -150,7 +150,7 @@
     '#..............................C.........#',
     '#.......................................#',
     '#.......................................#',
-    '###D###D#####D############D###D#####D####',
+    '###DD###DD#####DD#######DD###DD#####DD####',
     '#..BB..C...#..UU..C.########..KK......C.#',
     '#..BB..C...#..UU..C.#......##..KK......C.#',
     '#.......C..#.......#.#......##.......C..#',
@@ -166,9 +166,29 @@
   ];
 
   let map = [];
-  let doors = []; // { x, y, open: false }
+  let doors = []; // { x1, x2, y, open: false }
   // Room feature lookup: "x,y" -> type for special rendering
   const roomFeatures = {};
+
+  // ─── ROOMS ────────────────────────────────
+  const ROOMS = [
+    { name: 'Living Room', x1: 1, y1: 1, x2: 18, y2: 8 },
+    { name: 'Dining Room', x1: 20, y1: 1, x2: 40, y2: 8 },
+    { name: 'Hallway',     x1: 1, y1: 10, x2: 18, y2: 16 },
+    { name: 'Kitchen',     x1: 19, y1: 10, x2: 40, y2: 16 },
+    { name: 'Bedroom',     x1: 1, y1: 18, x2: 9, y2: 24 },
+    { name: 'Bathroom',    x1: 11, y1: 18, x2: 18, y2: 24 },
+    { name: 'Study',       x1: 20, y1: 18, x2: 40, y2: 24 },
+  ];
+
+  function getPlayerRoom() {
+    const tx = Math.floor(player.x / TILE);
+    const ty = Math.floor(player.y / TILE);
+    for (const r of ROOMS) {
+      if (tx >= r.x1 && tx <= r.x2 && ty >= r.y1 && ty <= r.y2) return r;
+    }
+    return null;
+  }
 
   function resetMap() {
     map = [];
@@ -188,7 +208,18 @@
         else if (ch === 'S') { map[y][x] = 2; roomFeatures[x+','+y] = 'bookshelf'; }
         else if (ch === 'W') { map[y][x] = 2; roomFeatures[x+','+y] = 'wardrobe'; }
         else if (ch === 'C') map[y][x] = 3;
-        else if (ch === 'D') { map[y][x] = 0; doors.push({ x, y, open: false }); }
+        else if (ch === 'D') {
+          // 2-tile door: group consecutive D's
+          if (x + 1 < MAP_W && MAP_STR[y][x + 1] === 'D') {
+            map[y][x] = 0;
+            map[y][x + 1] = 0;
+            doors.push({ x1: x, x2: x + 1, y, open: false });
+            x++; // skip next D
+          } else {
+            map[y][x] = 0;
+            doors.push({ x1: x, x2: x, y, open: false });
+          }
+        }
         else map[y][x] = 0;
       }
     }
@@ -197,15 +228,15 @@
   function isSolid(tx, ty) {
     if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
     if (map[ty][tx] === 1 || map[ty][tx] === 2) return true;
-    // Check closed doors (door occupies the tile)
+    // Check closed doors (door occupies both tiles)
     for (const d of doors) {
-      if (!d.open && d.x === tx && d.y === ty) return true;
+      if (!d.open && ty === d.y && tx >= d.x1 && tx <= d.x2) return true;
     }
     return false;
   }
 
   function findDoor(tx, ty) {
-    return doors.find(d => d.x === tx && d.y === ty);
+    return doors.find(d => d.y === ty && tx >= d.x1 && tx <= d.x2);
   }
 
   // ─── GAME STATE ───────────────────────────
@@ -242,8 +273,8 @@
   let maxEyeGlow = 1;
 
   function spawnMax() {
-    max.x = 36 * TILE + TILE / 2;
-    max.y = 26 * TILE + TILE / 2;
+    max.x = 34 * TILE + TILE / 2;
+    max.y = 5 * TILE + TILE / 2;
     max.path = [];
     max.pathIndex = 0;
     max.pathTimer = 0;
@@ -762,33 +793,86 @@
 
     // Draw doors on top
     for (const d of doors) {
-      const dx = d.x * TILE;
-      const dy = d.y * TILE;
-      // Door frame
-      ctx.fillStyle = '#1a1410';
-      ctx.fillRect(dx, dy, TILE, TILE);
-      ctx.fillStyle = '#252018';
-      ctx.fillRect(dx + 2, dy + 2, TILE - 4, TILE - 4);
-      if (!d.open) {
-        // Closed door - dark wood with handle
-        ctx.fillStyle = '#2a1a10';
-        ctx.fillRect(dx + 4, dy + 4, TILE - 8, TILE - 8);
-        ctx.fillStyle = '#3d2818';
-        ctx.fillRect(dx + 6, dy + 6, TILE - 12, TILE - 12);
-        // Handle
-        ctx.fillStyle = '#aa8844';
-        ctx.beginPath();
-        ctx.arc(dx + TILE - 10, dy + TILE/2, 3, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        // Open door - floor visible with door outline on one side
-        drawFloorTile(dx, dy, d.x, d.y);
-        ctx.fillStyle = '#3d2818';
-        ctx.fillRect(dx + 2, dy + 2, 4, TILE - 4);
-        ctx.fillStyle = '#2a1a10';
-        ctx.fillRect(dx + 3, dy + 3, 2, TILE - 6);
+      for (let dx = d.x1; dx <= d.x2; dx++) {
+        const px = dx * TILE;
+        const py = d.y * TILE;
+        // Door frame
+        ctx.fillStyle = '#1a1410';
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = '#252018';
+        ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+        if (!d.open) {
+          // Closed door - dark wood with handle on rightmost tile
+          ctx.fillStyle = '#2a1a10';
+          ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+          ctx.fillStyle = '#3d2818';
+          ctx.fillRect(px + 6, py + 6, TILE - 12, TILE - 12);
+          if (dx === d.x2) {
+            ctx.fillStyle = '#aa8844';
+            ctx.beginPath();
+            ctx.arc(px + TILE - 10, py + TILE/2, 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else {
+          // Open door - floor visible with door frame on left edge of left tile
+          drawFloorTile(px, py, dx, d.y);
+          if (dx === d.x1) {
+            ctx.fillStyle = '#3d2818';
+            ctx.fillRect(px + 2, py + 2, 4, TILE - 4);
+            ctx.fillStyle = '#2a1a10';
+            ctx.fillRect(px + 3, py + 3, 2, TILE - 6);
+          }
+        }
       }
     }
+  }
+
+  function drawRoomFog() {
+    const currentRoom = getPlayerRoom();
+    if (!currentRoom) return;
+
+    // Determine which rooms are visible
+    const visible = new Set();
+    visible.add(currentRoom);
+
+    // Also reveal adjacent rooms connected by open doors
+    for (const d of doors) {
+      if (!d.open) continue;
+      // Find which rooms this door connects
+      for (const r of ROOMS) {
+        if (d.y === r.y1 - 1 || d.y === r.y2) {
+          // Door is on the top or bottom wall of room r
+          if (d.x1 <= r.x2 && d.x2 >= r.x1) {
+            // Door is within room r's x range - find the adjacent room
+            for (const r2 of ROOMS) {
+              if (r2 === r) continue;
+              if ((d.y === r2.y2 && r2.y2 + 1 === r.y1) || (d.y === r2.y1 - 1 && r2.y1 - 1 === r.y2)) {
+                if (d.x1 <= r2.x2 && d.x2 >= r2.x1) {
+                  visible.add(r);
+                  visible.add(r2);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Draw darkness over everything
+    ctx.fillStyle = 'rgba(0,0,0,0.92)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Cut holes for visible rooms
+    ctx.globalCompositeOperation = 'destination-out';
+    for (const r of visible) {
+      const rx = (r.x1 - 0.5) * TILE;
+      const ry = (r.y1 - 0.5) * TILE;
+      const rw = (r.x2 - r.x1 + 2) * TILE;
+      const rh = (r.y2 - r.y1 + 2) * TILE;
+      ctx.fillStyle = 'rgba(255,255,255,1)';
+      ctx.fillRect(rx, ry, rw, rh);
+    }
+    ctx.globalCompositeOperation = 'source-over';
   }
 
   function drawFloorTile(px, py, x, y) {
@@ -1164,16 +1248,19 @@
       drawItems();
       drawMax();
       drawPlayer();
+      drawRoomFog();
       drawLightMask();
       drawMaxEyesInDark();
     } else if (gameState === STATE.OVER) {
       drawParticles();
       drawMax();
       drawPlayer();
+      drawRoomFog();
       drawLightMask();
       drawMaxEyesInDark();
     } else {
       // Menu state: dim everything
+      drawRoomFog();
       drawLightMask();
     }
 
