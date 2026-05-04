@@ -171,25 +171,6 @@
   const roomFeatures = {};
 
   // ─── ROOMS ────────────────────────────────
-  const ROOMS = [
-    { name: 'Living Room', x1: 1, y1: 1, x2: 18, y2: 8 },
-    { name: 'Dining Room', x1: 20, y1: 1, x2: 40, y2: 8 },
-    { name: 'Hallway',     x1: 1, y1: 10, x2: 18, y2: 16 },
-    { name: 'Kitchen',     x1: 19, y1: 10, x2: 40, y2: 16 },
-    { name: 'Bedroom',     x1: 1, y1: 18, x2: 9, y2: 24 },
-    { name: 'Bathroom',    x1: 11, y1: 18, x2: 18, y2: 24 },
-    { name: 'Study',       x1: 20, y1: 18, x2: 40, y2: 24 },
-  ];
-
-  function getPlayerRoom() {
-    const tx = Math.floor(player.x / TILE);
-    const ty = Math.floor(player.y / TILE);
-    for (const r of ROOMS) {
-      if (tx >= r.x1 && tx <= r.x2 && ty >= r.y1 && ty <= r.y2) return r;
-    }
-    return null;
-  }
-
   function resetMap() {
     map = [];
     doors = [];
@@ -827,54 +808,6 @@
     }
   }
 
-  function drawRoomFog() {
-    const currentRoom = getPlayerRoom();
-    if (!currentRoom) return;
-
-    // Determine which rooms are visible
-    const visible = new Set();
-    visible.add(currentRoom);
-
-    // Also reveal adjacent rooms connected by open doors
-    for (const d of doors) {
-      if (!d.open) continue;
-      // Find which rooms this door connects
-      for (const r of ROOMS) {
-        if (d.y === r.y1 - 1 || d.y === r.y2) {
-          // Door is on the top or bottom wall of room r
-          if (d.x1 <= r.x2 && d.x2 >= r.x1) {
-            // Door is within room r's x range - find the adjacent room
-            for (const r2 of ROOMS) {
-              if (r2 === r) continue;
-              if ((d.y === r2.y2 && r2.y2 + 1 === r.y1) || (d.y === r2.y1 - 1 && r2.y1 - 1 === r.y2)) {
-                if (d.x1 <= r2.x2 && d.x2 >= r2.x1) {
-                  visible.add(r);
-                  visible.add(r2);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // Draw darkness over everything
-    ctx.fillStyle = 'rgba(0,0,0,0.92)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Cut holes for visible rooms
-    ctx.globalCompositeOperation = 'destination-out';
-    for (const r of visible) {
-      const rx = (r.x1 - 0.5) * TILE;
-      const ry = (r.y1 - 0.5) * TILE;
-      const rw = (r.x2 - r.x1 + 2) * TILE;
-      const rh = (r.y2 - r.y1 + 2) * TILE;
-      ctx.fillStyle = 'rgba(255,255,255,1)';
-      ctx.fillRect(rx, ry, rw, rh);
-    }
-    ctx.globalCompositeOperation = 'source-over';
-  }
-
   function drawFloorTile(px, py, x, y) {
     // Dark hardwood floor
     ctx.fillStyle = '#1a120c';
@@ -1248,19 +1181,16 @@
       drawItems();
       drawMax();
       drawPlayer();
-      drawRoomFog();
       drawLightMask();
       drawMaxEyesInDark();
     } else if (gameState === STATE.OVER) {
       drawParticles();
       drawMax();
       drawPlayer();
-      drawRoomFog();
       drawLightMask();
       drawMaxEyesInDark();
     } else {
       // Menu state: dim everything
-      drawRoomFog();
       drawLightMask();
     }
 
